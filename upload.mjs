@@ -25,7 +25,7 @@ const createActor = (canisterId, options) => {
   });
 };
 
-const canisterId = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+const canisterId = "okoji-rqaaa-aaaap-qasma-cai"; // local rrkah-fqaaa-aaaaa-aaaaq-cai
 
 const upload = async () => {
   const buffer = await readFile("./index.html");
@@ -33,7 +33,7 @@ const upload = async () => {
   const storageActor = createActor(canisterId, {
     agentOptions: {
       fetch,
-      host: "http://localhost:8000",
+      host: "https://ic0.app", // http://localhost:8000
     },
   });
 
