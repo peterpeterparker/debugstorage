@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "dfx": "0.11.2",
+  "canisters": {
+    "debugstorage_backend": {
+      "type": "motoko",
+      "main": "src/debugstorage_backend/storage.mo"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
+}
