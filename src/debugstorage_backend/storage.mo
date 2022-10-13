@@ -5,6 +5,8 @@ import Iter "mo:base/Iter";
 import Error "mo:base/Error";
 import Blob "mo:base/Blob";
 import Principal "mo:base/Principal";
+import Buffer "mo:base/Buffer";
+import Array "mo:base/Array";
 
 import Result "mo:base/Result";
 
@@ -15,6 +17,7 @@ import StorageTypes "./storage.types";
 
 import Utils "./utils/utils";
 import WalletUtils "./utils/wallet.utils";
+import CertificationtUtils "./utils/certification.utils";
 
 import StorageStore "./storage.store";
 
@@ -60,12 +63,23 @@ actor Storage {
 
       switch (result) {
         case (#ok {key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding}) {
+          // TODO: issue https://forum.dfinity.org/t/http-request-how-to-not-upgrade-for-raw-domain/15876
+          let body = encoding.contentChunks[0];
+          let certificationHeaders = CertificationtUtils.certification_header(body);
+
+          // TODO: issue https://forum.dfinity.org/t/array-to-buffer-in-motoko/15880
+          let concatHeaders = Buffer.Buffer<HeaderField>(headers.size());
+          for (elem in headers.vals()) {
+            concatHeaders.add(elem)
+          };
+          concatHeaders.add(certificationHeaders);
+
           return {
             upgrade;
-            body = encoding.contentChunks[0];
-            headers;
+            body;
+            headers = concatHeaders.toArray();
             status_code = 200;
-            streaming_strategy = createStrategy(key, encoding, headers);
+            streaming_strategy = null; // TODO: createStrategy(key, encoding, headers)
           };
         };
         case (#err error) {};
@@ -81,20 +95,6 @@ actor Storage {
   };
 
   public shared query func http_request(request : HttpRequest) : async HttpResponse {
-    try {
-      return httpRequest(request, ?true);
-    } catch (err) {
-      return {
-        upgrade = null;
-        body = Blob.toArray(Text.encodeUtf8("Unexpected error: " # Error.message(err)));
-        headers = [];
-        status_code = 500;
-        streaming_strategy = null;
-      };
-    };
-  };
-
-  public shared func http_request_update(request : HttpRequest) : async HttpResponse {
     try {
       return httpRequest(request, ?false);
     } catch (err) {
