@@ -48,50 +48,50 @@ actor Storage {
      * HTTP
      */
 
-  private func httpRequest({method : Text; url : Text} : HttpRequest, upgrade: ?Bool) : HttpResponse {
+  private func httpRequest({ method : Text; url : Text } : HttpRequest, upgrade : ?Bool) : HttpResponse {
     if (Text.notEqual(method, "GET")) {
-        return {
-          upgrade;
-          body = Blob.toArray(Text.encodeUtf8("Method Not Allowed."));
-          headers = [];
-          status_code = 405;
-          streaming_strategy = null;
-        };
-      };
-
-      let result : Result.Result<Asset, Text> = storageStore.getAssetForUrl(url);
-
-      switch (result) {
-        case (#ok {key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding}) {
-          // TODO: issue https://forum.dfinity.org/t/http-request-how-to-not-upgrade-for-raw-domain/15876
-          let body = encoding.contentChunks[0];
-          let certificationHeaders = CertificationtUtils.certification_header(body, url);
-
-          // TODO: issue https://forum.dfinity.org/t/array-to-buffer-in-motoko/15880
-          let concatHeaders = Buffer.Buffer<HeaderField>(headers.size());
-          for (elem in headers.vals()) {
-            concatHeaders.add(elem)
-          };
-          concatHeaders.add(certificationHeaders);
-
-          return {
-            upgrade;
-            body;
-            headers = concatHeaders.toArray();
-            status_code = 200;
-            streaming_strategy = null; // TODO: createStrategy(key, encoding, headers)
-          };
-        };
-        case (#err error) {};
-      };
-
       return {
         upgrade;
-        body = Blob.toArray(Text.encodeUtf8("Permission denied. Could not perform this operation."));
+        body = Blob.toArray(Text.encodeUtf8("Method Not Allowed."));
         headers = [];
-        status_code = 403;
+        status_code = 405;
         streaming_strategy = null;
       };
+    };
+
+    let result : Result.Result<Asset, Text> = storageStore.getAssetForUrl(url);
+
+    switch (result) {
+      case (#ok { key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding }) {
+        // TODO: issue https://forum.dfinity.org/t/http-request-how-to-not-upgrade-for-raw-domain/15876
+        let body = encoding.contentChunks[0];
+        let certificationHeaders = CertificationtUtils.certification_header(body, url);
+
+        // TODO: issue https://forum.dfinity.org/t/array-to-buffer-in-motoko/15880
+        let concatHeaders = Buffer.Buffer<HeaderField>(headers.size());
+        for (elem in headers.vals()) {
+          concatHeaders.add(elem);
+        };
+        concatHeaders.add(certificationHeaders);
+
+        return {
+          upgrade;
+          body;
+          headers = concatHeaders.toArray();
+          status_code = 200;
+          streaming_strategy = null; // TODO: createStrategy(key, encoding, headers)
+        };
+      };
+      case (#err error) {};
+    };
+
+    return {
+      upgrade;
+      body = Blob.toArray(Text.encodeUtf8("Permission denied. Could not perform this operation."));
+      headers = [];
+      status_code = 403;
+      streaming_strategy = null;
+    };
   };
 
   public shared query func http_request(request : HttpRequest) : async HttpResponse {
@@ -108,16 +108,16 @@ actor Storage {
     };
   };
 
-  public shared query ({caller}) func http_request_streaming_callback(
-    streamingToken : StreamingCallbackToken
+  public shared query ({ caller }) func http_request_streaming_callback(
+    streamingToken : StreamingCallbackToken,
   ) : async StreamingCallbackHttpResponse {
     let result : Result.Result<Asset, Text> = storageStore.getAsset(
       streamingToken.fullPath,
-      streamingToken.token
+      streamingToken.token,
     );
 
     switch (result) {
-      case (#ok {key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding}) {
+      case (#ok { key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding }) {
         return {
           token = createToken(key, streamingToken.index, encoding, headers);
           body = encoding.contentChunks[streamingToken.index];
@@ -133,7 +133,7 @@ actor Storage {
     let streamingToken : ?StreamingCallbackToken = createToken(key, 0, encoding, headers);
 
     switch (streamingToken) {
-      case (null) {null};
+      case (null) { null };
       case (?streamingToken) {
         // Hack: https://forum.dfinity.org/t/cryptic-error-from-icx-proxy/6944/8
         // Issue: https://github.com/dfinity/candid/issues/273
@@ -145,12 +145,10 @@ actor Storage {
           http_request_streaming_callback : shared () -> async ();
         };
 
-        return ?#Callback(
-          {
-            token = streamingToken;
-            callback = canister.http_request_streaming_callback;
-          }
-        );
+        return ?#Callback({
+          token = streamingToken;
+          callback = canister.http_request_streaming_callback;
+        });
       };
     };
   };
@@ -159,7 +157,7 @@ actor Storage {
     key : AssetKey,
     chunkIndex : Nat,
     encoding : AssetEncoding,
-    headers : [HeaderField]
+    headers : [HeaderField],
   ) : ?StreamingCallbackToken {
     if (chunkIndex + 1 >= encoding.contentChunks.size()) {
       return null;
@@ -180,33 +178,41 @@ actor Storage {
      * Upload
      */
 
-  public shared ({caller}) func initUpload(key : AssetKey) : async ({batchId : Nat}) {
+  public shared ({ caller }) func initUpload(key : AssetKey) : async ({
+    batchId : Nat;
+  }) {
     let nextBatchID : Nat = storageStore.createBatch(key);
 
-    return {batchId = nextBatchID};
+    return { batchId = nextBatchID };
   };
 
-  public shared ({caller}) func uploadChunk(chunk : Chunk) : async ({chunkId : Nat}) {
-    let (result : {#chunkId : Nat; #error : Text}) = storageStore.createChunk(chunk);
+  public shared ({ caller }) func uploadChunk(chunk : Chunk) : async ({
+    chunkId : Nat;
+  }) {
+    let (result : { #chunkId : Nat; #error : Text }) = storageStore.createChunk(chunk);
 
     switch (result) {
       case (#error error) {
         throw Error.reject(error);
       };
       case (#chunkId chunkId) {
-        return {chunkId};
+        return { chunkId };
       };
     };
   };
 
-  public shared ({caller}) func commitUpload(
-    {batchId; chunkIds; headers} : {
+  public shared ({ caller }) func commitUpload(
+    { batchId; chunkIds; headers } : {
       batchId : Nat;
       headers : [HeaderField];
       chunkIds : [Nat];
-    }
+    },
   ) : async () {
-    let ({error} : {error : ?Text}) = storageStore.commitBatch({batchId; headers; chunkIds});
+    let ({ error } : { error : ?Text }) = storageStore.commitBatch({
+      batchId;
+      headers;
+      chunkIds;
+    });
 
     switch (error) {
       case (?error) {
@@ -220,12 +226,12 @@ actor Storage {
      * List and delete
      */
 
-  public shared query ({caller}) func list(folder : ?Text) : async [AssetKey] {
+  public shared query ({ caller }) func list(folder : ?Text) : async [AssetKey] {
     let keys : [AssetKey] = storageStore.getKeys(folder);
     return keys;
   };
 
-  public shared ({caller}) func del({fullPath; token} : {fullPath : Text; token : ?Text}) : async () {
+  public shared ({ caller }) func del({ fullPath; token } : { fullPath : Text; token : ?Text }) : async () {
     let result : Result.Result<Asset, Text> = storageStore.deleteAsset(fullPath, token);
 
     switch (result) {
@@ -243,5 +249,16 @@ actor Storage {
   system func postupgrade() {
     storageStore.postupgrade(entries);
     entries := [];
+
+    // TODO
+    let result : Result.Result<Asset, Text> = storageStore.getAssetForUrl("/");
+
+    switch (result) {
+      case (#ok { key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding }) {
+        let body = encoding.contentChunks[0];
+        CertificationtUtils.update_asset_hash(body, "/");
+      };
+      case (#err error) {};
+    };
   };
 };
