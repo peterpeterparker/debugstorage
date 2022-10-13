@@ -27,6 +27,9 @@ const createActor = (canisterId, options) => {
 
 const canisterId = "okoji-rqaaa-aaaap-qasma-cai"; // local rrkah-fqaaa-aaaaa-aaaaq-cai
 
+// debug https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.ic0.app/?id=okoji-rqaaa-aaaap-qasma-cai
+// https://forum.dfinity.org/t/feature-request-map-appropriate-http-request-methods-to-update-calls/4303/28
+
 const upload = async () => {
   const buffer = await readFile("./index.html");
 
