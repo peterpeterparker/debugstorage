@@ -4,6 +4,7 @@ import Array "mo:base/Array";
 import Iter "mo:base/Iter";
 import Nat8 "mo:base/Nat8";
 import Buffer "mo:base/Buffer";
+import Text "mo:base/Text";
 import SHA256 "mo:sha256/SHA256";
 
 import HTTP "../types/http.types";
@@ -22,7 +23,7 @@ module {
      *   This header contains the certificate obtained from the system, which we just pass through,
       *  and our hash tree. There is CBOR and Base64 encoding involved here.
     */
-    public func certification_header(content: [Nat8]) : HeaderField {
+    public func certification_header(content: [Nat8], url: Text) : HeaderField {
         let cert = switch (CertifiedData.getCertificate()) {
             case (?c) c;
             case null {
@@ -37,20 +38,21 @@ module {
         };
         return (
             "ic-certificate",
-            "certificate=:" # base64(cert) # ":, " # "tree=:" # base64(cbor_tree(asset_tree(content))) # ":",
+            "certificate=:" # base64(cert) # ":, " # "tree=:" # base64(cbor_tree(asset_tree(content, url))) # ":",
         );
     };
 
     /*
-     * The (undocumented) interface for certified assets requires the service to put
+     * The interface for certified assets requires the service to put
      * all HTTP resources into such a tree. We only have one resource, so that is simple:
+     *
+     * Documentation: https://internetcomputer.org/docs/current/references/ic-interface-spec#http-gateway-certification
     */
 
-    private func asset_tree(content: [Nat8]) : HashTree {
+    private func asset_tree(content: [Nat8], url: Text) : HashTree {
         #labeled ("http_assets",
-        #labeled ("/",
-            #leaf (h(content))
-        )
+        #labeled (Text.encodeUtf8(url), 
+          #leaf (h(content)))
         );
     };
 

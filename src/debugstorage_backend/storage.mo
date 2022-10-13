@@ -65,7 +65,7 @@ actor Storage {
         case (#ok {key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding}) {
           // TODO: issue https://forum.dfinity.org/t/http-request-how-to-not-upgrade-for-raw-domain/15876
           let body = encoding.contentChunks[0];
-          let certificationHeaders = CertificationtUtils.certification_header(body);
+          let certificationHeaders = CertificationtUtils.certification_header(body, url);
 
           // TODO: issue https://forum.dfinity.org/t/array-to-buffer-in-motoko/15880
           let concatHeaders = Buffer.Buffer<HeaderField>(headers.size());
