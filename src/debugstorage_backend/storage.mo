@@ -68,6 +68,7 @@ actor Storage {
         let certificationHeaders = CertificationtUtils.certification_header(body, url);
 
         // TODO: issue https://forum.dfinity.org/t/array-to-buffer-in-motoko/15880
+        // let tmp = Buffer.fromArray(headers);
         let concatHeaders = Buffer.Buffer<HeaderField>(headers.size());
         for (elem in headers.vals()) {
           concatHeaders.add(elem);
