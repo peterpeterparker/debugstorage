@@ -4,7 +4,7 @@
   "description": "Welcome to your new debugstorage project and to the internet computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.",
   "main": "index.mjs",
   "scripts": {
-    "upload": "node upload.mjs",
+    "upload": "node scripts/upload.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
