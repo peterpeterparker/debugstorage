@@ -1,3 +1,4 @@
+type Value = vec vec nat8;
 type StreamingStrategy = variant {
                            Callback:
                             record {
@@ -25,12 +26,14 @@ type StreamingCallbackHttpResponse =
    body: vec nat8;
    token: opt StreamingCallbackToken__1;
  };
+type Key = blob;
 type HttpResponse = 
  record {
    body: vec nat8;
    headers: vec HeaderField;
    status_code: nat16;
    streaming_strategy: opt StreamingStrategy;
+   upgrade: opt bool;
  };
 type HttpRequest = 
  record {
@@ -49,6 +52,35 @@ type HeaderField =
    text;
    text;
  };
+type HashTree__1 = 
+ variant {
+   "empty";
+   fork: record {
+           HashTree__1;
+           HashTree__1;
+         };
+   labeled: record {
+              Key;
+              HashTree__1;
+            };
+   leaf: Value;
+   pruned: Hash;
+ };
+type HashTree = 
+ variant {
+   "empty";
+   fork: record {
+           HashTree__1;
+           HashTree__1;
+         };
+   labeled: record {
+              Key;
+              HashTree__1;
+            };
+   leaf: Value;
+   pruned: Hash;
+ };
+type Hash = blob;
 type Chunk = 
  record {
    batchId: nat;
@@ -78,5 +110,6 @@ service : {
    (StreamingCallbackHttpResponse) query;
   initUpload: (AssetKey) -> (record {batchId: nat;});
   list: (opt text) -> (vec AssetKey) query;
+  tree: (text) -> (HashTree) query;
   uploadChunk: (Chunk) -> (record {chunkId: nat;});
 }

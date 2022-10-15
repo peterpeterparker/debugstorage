@@ -12,12 +12,14 @@ import Result "mo:base/Result";
 
 import Types "./types/types";
 import HTTP "./types/http.types";
+import CertificationTypes "./types/certification.types";
 
 import StorageTypes "./storage.types";
 
 import Utils "./utils/utils";
 import WalletUtils "./utils/wallet.utils";
 import CertificationtUtils "./utils/certification.utils";
+import MerkleTreeUtils "./utils/merkletree.utils";
 
 import StorageStore "./storage.store";
 
@@ -29,6 +31,8 @@ actor Storage {
   private type AssetKey = StorageTypes.AssetKey;
   private type AssetEncoding = StorageTypes.AssetEncoding;
   private type Chunk = StorageTypes.Chunk;
+
+  private type HashTree = CertificationTypes.HashTree;
 
   private type HttpRequest = HTTP.HttpRequest;
   private type HttpResponse = HTTP.HttpResponse;
@@ -64,11 +68,10 @@ actor Storage {
     switch (result) {
       case (#ok { key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding }) {
         // TODO: issue https://forum.dfinity.org/t/http-request-how-to-not-upgrade-for-raw-domain/15876
-        let body = encoding.contentChunks[0];
-        let certificationHeaders = CertificationtUtils.certification_header(body, url);
+        let certificationHeaders = CertificationtUtils.certification_header(encoding.contentChunks, key.fullPath, saveTree);
 
         // TODO: issue https://forum.dfinity.org/t/array-to-buffer-in-motoko/15880
-        // let tmp = Buffer.fromArray(headers);
+        // let tmp = Buffer.fromArray<HeaderField>(headers);
         let concatHeaders = Buffer.Buffer<HeaderField>(headers.size());
         for (elem in headers.vals()) {
           concatHeaders.add(elem);
@@ -77,10 +80,10 @@ actor Storage {
 
         return {
           upgrade;
-          body;
+          body = encoding.contentChunks[0];
           headers = concatHeaders.toArray();
           status_code = 200;
-          streaming_strategy = null; // TODO: createStrategy(key, encoding, headers)
+          streaming_strategy = createStrategy(key, encoding, headers)
         };
       };
       case (#err error) {};
@@ -232,6 +235,12 @@ actor Storage {
     return keys;
   };
 
+  public shared query func tree(url: Text): async HashTree {
+    #labeled (Text.encodeUtf8("http_assets"),
+      MerkleTreeUtils.reveal(saveTree, Text.encodeUtf8(url)),
+    );
+  };
+
   public shared ({ caller }) func del({ fullPath; token } : { fullPath : Text; token : ?Text }) : async () {
     let result : Result.Result<Asset, Text> = storageStore.deleteAsset(fullPath, token);
 
@@ -243,6 +252,8 @@ actor Storage {
     };
   };
 
+  var saveTree: MerkleTreeUtils.Tree = MerkleTreeUtils.empty();
+
   system func preupgrade() {
     entries := Iter.toArray(storageStore.preupgrade().entries());
   };
@@ -251,15 +262,8 @@ actor Storage {
     storageStore.postupgrade(entries);
     entries := [];
 
-    // TODO
-    let result : Result.Result<Asset, Text> = storageStore.getAssetForUrl("/");
+    saveTree := storageStore.assetTree();
 
-    switch (result) {
-      case (#ok { key : AssetKey; headers : [HeaderField]; encoding : AssetEncoding }) {
-        let body = encoding.contentChunks[0];
-        CertificationtUtils.update_asset_hash(body, "/");
-      };
-      case (#err error) {};
-    };
+    CertificationtUtils.update_asset_hash(saveTree);
   };
 };

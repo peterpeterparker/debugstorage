@@ -7,8 +7,13 @@ import Array "mo:base/Array";
 import Iter "mo:base/Iter";
 import Result "mo:base/Result";
 import Buffer "mo:base/Buffer";
+import Blob "mo:base/Blob";
 
 import StorageTypes "./storage.types";
+import CertificationTypes "./types/certification.types";
+
+import HashUtils "./utils/hash.utils";
+import MerkleTreeUtils "./utils/merkletree.utils";
 
 module {
 
@@ -19,6 +24,9 @@ module {
   type AssetKey = StorageTypes.AssetKey;
   type AssetEncoding = StorageTypes.AssetEncoding;
 
+  type HashTree = CertificationTypes.HashTree;
+  type HashKey = CertificationTypes.Key;
+
   public class StorageStore() {
 
     private let BATCH_EXPIRY_NANOS = 300_000_000_000;
@@ -27,27 +35,27 @@ module {
     private let batches : HashMap.HashMap<Nat, Batch> = HashMap.HashMap<Nat, Batch>(
       10,
       Nat.equal,
-      Hash.hash
+      Hash.hash,
     );
 
     private let chunks : HashMap.HashMap<Nat, Chunk> = HashMap.HashMap<Nat, Chunk>(
       10,
       Nat.equal,
-      Hash.hash
+      Hash.hash,
     );
 
     private var assets : HashMap.HashMap<Text, Asset> = HashMap.HashMap<Text, Asset>(
       10,
       Text.equal,
-      Text.hash
+      Text.hash,
     );
 
     private var nextBatchID : Nat = 0;
     private var nextChunkID : Nat = 0;
 
     /**
-         * Getter, list and delete
-         */
+      * Getter, list and delete
+      */
 
     public func getAssetForUrl(url : Text) : Result.Result<Asset, Text> {
       if (Text.size(url) == 0) {
@@ -97,7 +105,7 @@ module {
           return #err "No token provided.";
         };
         case (?token) {
-          let compare : {#less; #equal; #greater} = Text.compare(token, assetToken);
+          let compare : { #less; #equal; #greater } = Text.compare(token, assetToken);
 
           switch (compare) {
             case (#equal equal) {
@@ -131,7 +139,7 @@ module {
       let entries : Iter.Iter<(Text, Asset)> = assets.entries();
       let keys : Iter.Iter<AssetKey> = Iter.map(
         entries,
-        func((fullPath : Text, value : Asset)) : AssetKey {value.key}
+        func((fullPath : Text, value : Asset)) : AssetKey { value.key },
       );
       let allKeys : [AssetKey] = Iter.toArray(keys);
 
@@ -142,7 +150,7 @@ module {
         case (?folder) {
           let filteredKeys : [AssetKey] = Array.filter<AssetKey>(
             allKeys,
-            func(key : AssetKey) : Bool {Text.equal(key.folder, folder)}
+            func(key : AssetKey) : Bool { Text.equal(key.folder, folder) },
           );
           return filteredKeys;
         };
@@ -165,15 +173,16 @@ module {
         {
           key;
           expiresAt = now + BATCH_EXPIRY_NANOS;
-        }
+        },
       );
 
       return nextBatchID;
     };
 
-    public func createChunk({batchId : Nat; content : [Nat8]} : Chunk) : (
-      {#chunkId : Nat; #error : Text}
-    ) {
+    public func createChunk({ batchId : Nat; content : [Nat8] } : Chunk) : ({
+      #chunkId : Nat;
+      #error : Text;
+    }) {
       switch (batches.get(batchId)) {
         case (null) {
           return #error "Batch not found.";
@@ -185,7 +194,7 @@ module {
             {
               key = batch.key;
               expiresAt = Time.now() + BATCH_EXPIRY_NANOS;
-            }
+            },
           );
 
           nextChunkID := nextChunkID + 1;
@@ -195,7 +204,7 @@ module {
             {
               batchId;
               content;
-            }
+            },
           );
 
           return #chunkId nextChunkID;
@@ -204,38 +213,45 @@ module {
     };
 
     public func commitBatch(
-      {batchId; chunkIds; headers} : {
+      { batchId; chunkIds; headers } : {
         batchId : Nat;
         headers : [(Text, Text)];
         chunkIds : [Nat];
-      }
-    ) : ({error : ?Text}) {
+      },
+    ) : ({ error : ?Text }) {
       let batch : ?Batch = batches.get(batchId);
 
       switch (batch) {
         case (null) {
-          return {error = ?"No batch to commit."};
+          return { error = ?"No batch to commit." };
         };
         case (?batch) {
-          let error : {error : ?Text} = commitChunks({batchId; batch; chunkIds; headers});
+          let error : { error : ?Text } = commitChunks({
+            batchId;
+            batch;
+            chunkIds;
+            headers;
+          });
           return error;
         };
       };
     };
 
     private func commitChunks(
-      {batchId; batch; chunkIds; headers} : {
+      { batchId; batch; chunkIds; headers } : {
         batchId : Nat;
         batch : Batch;
         headers : [(Text, Text)];
         chunkIds : [Nat];
-      }
-    ) : ({error : ?Text}) {
+      },
+    ) : ({ error : ?Text }) {
       // Test batch is not expired
       let now : Time.Time = Time.now();
       if (now > batch.expiresAt) {
         clearExpiredBatches();
-        return {error = ?"Batch did not complete in time. Chunks cannot be commited."};
+        return {
+          error = ?"Batch did not complete in time. Chunks cannot be commited.";
+        };
       };
 
       let contentChunks : Buffer.Buffer<[Nat8]> = Buffer.Buffer(1);
@@ -246,19 +262,19 @@ module {
         switch (chunk) {
           case (?chunk) {
             if (Nat.notEqual(batchId, chunk.batchId)) {
-              return {error = ?"Chunk not included in the provided batch"};
+              return { error = ?"Chunk not included in the provided batch" };
             };
 
             contentChunks.add(chunk.content);
           };
           case null {
-            return {error = ?"Chunk does not exist."};
+            return { error = ?"Chunk does not exist." };
           };
         };
       };
 
       if (contentChunks.size() <= 0) {
-        return {error = ?"No chunk to commit."};
+        return { error = ?"No chunk to commit." };
       };
 
       var totalLength = 0;
@@ -277,15 +293,15 @@ module {
             contentChunks = contentChunks.toArray();
             totalLength;
           };
-        }
+        },
       );
 
-      clearBatch({batchId; chunkIds});
+      clearBatch({ batchId; chunkIds });
 
-      return {error = null};
+      return { error = null };
     };
 
-    private func clearBatch({batchId : Nat; chunkIds : [Nat]} : {batchId : Nat; chunkIds : [Nat]}) {
+    private func clearBatch({ batchId : Nat; chunkIds : [Nat] } : { batchId : Nat; chunkIds : [Nat] }) {
       for (chunkId in chunkIds.vals()) {
         chunks.delete(chunkId);
       };
@@ -307,10 +323,40 @@ module {
       // Remove chunk without existing batches (those we just deleted above)
       for ((chunkId : Nat, chunk : Chunk) in chunks.entries()) {
         switch (batches.get(chunk.batchId)) {
-          case (null) {chunks.delete(chunkId)};
+          case (null) { chunks.delete(chunkId) };
           case (?batch) {};
         };
       };
+    };
+
+    /**
+     * Certified data
+     */
+
+    /**
+     * The interface for certified assets requires the service to put
+     * all HTTP resources into such a tree.
+     *
+     * Documentation: https://internetcomputer.org/docs/current/references/ic-interface-spec#http-gateway-certification
+    */
+    public func assetTree() : MerkleTreeUtils.Tree {
+      // TODO: not the images ?
+      let keys : [AssetKey] = getKeys(null);
+
+      var tree = MerkleTreeUtils.empty();
+
+      for ({ fullPath } in keys.vals()) {
+        let result : Result.Result<Asset, Text> = getAsset(fullPath, null);
+
+        switch (result) {
+          case (#ok asset) {
+            tree := MerkleTreeUtils.put(tree, Text.encodeUtf8(fullPath), asset.encoding.contentChunks);
+          };
+          case (#err error) {};
+        };
+      };
+
+      tree;
     };
 
     public func preupgrade() : HashMap.HashMap<Text, Asset> {

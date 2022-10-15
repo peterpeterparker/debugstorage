@@ -5,19 +5,30 @@ import Iter "mo:base/Iter";
 import Nat8 "mo:base/Nat8";
 import Buffer "mo:base/Buffer";
 import Text "mo:base/Text";
-import SHA256 "mo:sha256/SHA256";
 
 import HTTP "../types/http.types";
+
+import CertificationTypes "../types/certification.types";
+
+import HashUtils "./hash.utils";
+import MerkleTreeUtils "./merkletree.utils";
 
 /**
  * Credits to Joachim Breitner (https://github.com/nomeata)
  *
  * Original code: https://github.com/nomeata/motoko-certified-http
  *
+ * https://forum.dfinity.org/t/certified-assets-from-motoko-poc-tutorial/7263/5
+ * https://forum.dfinity.org/t/has-anyone-implemented-the-hash-algorithm-and-merkle-tree-in-motoko-language/6857
+ *
+ * https://gist.github.com/nomeata/f325fcd2a6692df06e38adedf9ca1877
  */
 
 module {
   private type HeaderField = HTTP.HeaderField;
+
+  private type Hash = CertificationTypes.Hash;
+  private type HashTree = CertificationTypes.HashTree;
 
   /**
     * From SW:
@@ -42,7 +53,8 @@ module {
      *   This header contains the certificate obtained from the system, which we just pass through,
       *  and our hash tree. There is CBOR and Base64 encoding involved here.
     */
-  public func certification_header(content: [Nat8], url: Text) : HeaderField {
+  public func certification_header(content : [[Nat8]], url : Text, tree : MerkleTreeUtils.Tree) : HeaderField {
+
     let cert = switch (CertifiedData.getCertificate()) {
       case (?c) c;
       case null {
@@ -57,41 +69,30 @@ module {
     };
     return (
       "ic-certificate",
-      "certificate=:" # base64(cert) # ":, " # "tree=:" # base64(cbor_tree(asset_tree(content, url))) # ":",
+      "certificate=:" # base64(cert) # ":, " # "tree=:" # base64(cbor_tree(asset_tree(content, url, tree))) # ":",
     );
   };
 
   /*
-     * The interface for certified assets requires the service to put
-     * all HTTP resources into such a tree. We only have one resource, so that is simple:
-     *
-     * Documentation: https://internetcomputer.org/docs/current/references/ic-interface-spec#http-gateway-certification
-    */
+The (undocumented) interface for certified assets requires the service to put
+all HTTP resources into such a tree. We only have one resource, so that is simple:
+*/
 
-  private func asset_tree(content : [Nat8], url : Text) : HashTree {
-    #labeled(
-      "http_assets",
-      #labeled(Text.encodeUtf8(url), #leaf(h(content))),
-    );
-  };
+  // func asset_tree() : HashTree {
+  // #labeled ("http_assets",
+  // #labeled ("/",
+  // #leaf (h(main_page()))
+  // )
+  // );
+  // };
 
-  private func h(b1 : [Nat8]) : Blob {
-    let d = SHA256.Digest();
-    d.write(b1);
-    Blob.fromArray(d.sum());
-  };
-  private func h2(b1 : [Nat8], b2 : [Nat8]) : Blob {
-    let d = SHA256.Digest();
-    d.write(b1);
-    d.write(b2);
-    Blob.fromArray(d.sum());
-  };
-  private func h3(b1 : [Nat8], b2 : [Nat8], b3 : [Nat8]) : Blob {
-    let d = SHA256.Digest();
-    d.write(b1);
-    d.write(b2);
-    d.write(b3);
-    Blob.fromArray(d.sum());
+  func asset_tree(content : [[Nat8]], url : Text, tree : MerkleTreeUtils.Tree) : HashTree {
+    // #labeled (Text.encodeUtf8("http_assets"),
+    //  MerkleTreeUtils.reveal(tree, Text.encodeUtf8(url)),
+    // );
+    MerkleTreeUtils.witnessUnderLabel(Text.encodeUtf8("http_assets"), MerkleTreeUtils.reveal(tree, Text.encodeUtf8(url)));
+    // MerkleTreeUtils.hashUnderLabel(Text.encodeUtf8("http_assets"), MerkleTreeUtils.treeHash(tree));
+    // MerkleTreeUtils.witnessUnderLabel(Text.encodeUtf8("http_assets"), MerkleTreeUtils.reveals(tree, Iter.fromArray([Text.encodeUtf8("/"), Text.encodeUtf8("/d/post1234")])));
   };
 
   /*
@@ -119,24 +120,6 @@ module {
     return out;
   };
 
-  /*
-    * The CBOR encoding of a HashTree, according to
-    * https://sdk.dfinity.org/docs/interface-spec/index.html#certification-encoding
-    * This data structure needs only very few features of CBOR, so instead of writing
-    * a full-fledged CBOR encoding library, I just directly write out the bytes for the
-    * few construct we need here.
-  */
-  private type Hash = Blob;
-  private type Key = Blob;
-  private type Value = Blob;
-  private type HashTree = {
-    #empty;
-    #pruned : Hash;
-    #fork : (HashTree, HashTree);
-    #labeled : (Key, HashTree);
-    #leaf : Value;
-  };
-
   private func cbor_tree(tree : HashTree) : Blob {
     let buf = Buffer.Buffer<Nat8>(100);
 
@@ -154,6 +137,16 @@ module {
       };
     };
 
+    func addNat8(b : [[Nat8]]) {
+      for (chunk in b.vals()) {
+        buf.add(0x58);
+        buf.add(Nat8.fromNat(chunk.size()));
+        for (c in chunk.vals()) {
+          buf.add(c);
+        };
+      };
+    };
+
     func go(t : HashTree) {
       switch (t) {
         case (#empty) { buf.add(0x81); buf.add(0x00) };
@@ -164,7 +157,7 @@ module {
           add_blob(l);
           go(t);
         };
-        case (#leaf(v)) { buf.add(0x82); buf.add(0x03); add_blob(v) };
+        case (#leaf(v)) { buf.add(0x82); buf.add(0x03); addNat8(v) };
         case (#pruned(h)) { buf.add(0x82); buf.add(0x04); add_blob(h) };
       };
     };
@@ -174,31 +167,9 @@ module {
     return Blob.fromArray(buf.toArray());
   };
 
-  public func update_asset_hash(content : [Nat8], url : Text) {
-    CertifiedData.set(hash_tree(asset_tree(content, url)));
+  public func update_asset_hash(tree : MerkleTreeUtils.Tree) {
+    let certifiedData = MerkleTreeUtils.hashUnderLabel(Text.encodeUtf8("http_assets"), MerkleTreeUtils.treeHash(tree));
+    CertifiedData.set(certifiedData);
   };
 
-  /*
-   * The root hash of a HashTree. This is the algorithm `reconstruct` described in
-   * https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate
-  */
-  private func hash_tree(t : HashTree) : Hash {
-    switch (t) {
-      case (#empty) {
-        h(Blob.toArray("\11ic-hashtree-empty"));
-      };
-      case (#fork(t1, t2)) {
-        h3(Blob.toArray("\10ic-hashtree-fork"), Blob.toArray(hash_tree(t1)), Blob.toArray(hash_tree(t2)));
-      };
-      case (#labeled(l, t)) {
-        h3(Blob.toArray("\13ic-hashtree-labeled"), Blob.toArray(l), Blob.toArray(hash_tree(t)));
-      };
-      case (#leaf(v)) {
-        h2(Blob.toArray("\10ic-hashtree-leaf"), Blob.toArray(v));
-      };
-      case (#pruned(h)) {
-        h;
-      };
-    };
-  };
 };

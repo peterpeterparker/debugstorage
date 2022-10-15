@@ -9,6 +9,17 @@ export interface AssetKey {
   'folder' : string,
 }
 export interface Chunk { 'content' : Array<number>, 'batchId' : bigint }
+export type Hash = Array<number>;
+export type HashTree = { 'labeled' : [Key, HashTree__1] } |
+  { 'fork' : [HashTree__1, HashTree__1] } |
+  { 'leaf' : Value } |
+  { 'empty' : null } |
+  { 'pruned' : Hash };
+export type HashTree__1 = { 'labeled' : [Key, HashTree__1] } |
+  { 'fork' : [HashTree__1, HashTree__1] } |
+  { 'leaf' : Value } |
+  { 'empty' : null } |
+  { 'pruned' : Hash };
 export type HeaderField = [string, string];
 export type HeaderField__1 = [string, string];
 export interface HttpRequest {
@@ -20,9 +31,11 @@ export interface HttpRequest {
 export interface HttpResponse {
   'body' : Array<number>,
   'headers' : Array<HeaderField>,
+  'upgrade' : [] | [boolean],
   'streaming_strategy' : [] | [StreamingStrategy],
   'status_code' : number,
 }
+export type Key = Array<number>;
 export interface StreamingCallbackHttpResponse {
   'token' : [] | [StreamingCallbackToken__1],
   'body' : Array<number>,
@@ -47,6 +60,7 @@ export type StreamingStrategy = {
       'callback' : [Principal, string],
     }
   };
+export type Value = Array<Array<number>>;
 export interface _SERVICE {
   'commitUpload' : ActorMethod<
     [
@@ -69,5 +83,6 @@ export interface _SERVICE {
   >,
   'initUpload' : ActorMethod<[AssetKey], { 'batchId' : bigint }>,
   'list' : ActorMethod<[[] | [string]], Array<AssetKey>>,
+  'tree' : ActorMethod<[string], HashTree>,
   'uploadChunk' : ActorMethod<[Chunk], { 'chunkId' : bigint }>,
 }
