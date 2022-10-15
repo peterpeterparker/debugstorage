@@ -53,7 +53,7 @@ module {
      *   This header contains the certificate obtained from the system, which we just pass through,
       *  and our hash tree. There is CBOR and Base64 encoding involved here.
     */
-  public func certification_header(content : [[Nat8]], url : Text, tree : MerkleTreeUtils.Tree) : HeaderField {
+  public func certification_header(url : Text, tree : MerkleTreeUtils.Tree) : HeaderField {
 
     let cert = switch (CertifiedData.getCertificate()) {
       case (?c) c;
@@ -69,7 +69,7 @@ module {
     };
     return (
       "ic-certificate",
-      "certificate=:" # base64(cert) # ":, " # "tree=:" # base64(cbor_tree(asset_tree(content, url, tree))) # ":",
+      "certificate=:" # base64(cert) # ":, " # "tree=:" # base64(cbor_tree(asset_tree(url, tree))) # ":",
     );
   };
 
@@ -86,7 +86,7 @@ all HTTP resources into such a tree. We only have one resource, so that is simpl
   // );
   // };
 
-  func asset_tree(content : [[Nat8]], url : Text, tree : MerkleTreeUtils.Tree) : HashTree {
+  func asset_tree(url : Text, tree : MerkleTreeUtils.Tree) : HashTree {
     // #labeled (Text.encodeUtf8("http_assets"),
     //  MerkleTreeUtils.reveal(tree, Text.encodeUtf8(url)),
     // );
