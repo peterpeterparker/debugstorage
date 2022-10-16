@@ -222,7 +222,12 @@ actor Storage {
       case (?error) {
         throw Error.reject(error);
       };
-      case null {};
+      case null {
+        // TODO: don't need to recaculate everything but just put
+        saveTree := storageStore.assetTree();
+
+        CertificationtUtils.update_asset_hash(saveTree);
+      };
     };
   };
 
